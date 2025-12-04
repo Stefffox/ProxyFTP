@@ -13,5 +13,5 @@ This projet is under the **MIT Lisence**.
 See the file for details
 
 # Authors
-Nathanaël DAUNIS : https://github.com/Stefffox
+Nathanaël DAUNIS : https://github.com/Stefffox <br>
 Mathieu JONQUIERES : https://github.com/MathieuJonquieres

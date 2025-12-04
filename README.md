@@ -9,7 +9,7 @@
 # Software and Tools 
 
 # Lisence 
-This projet is under the **MIT Lisence**.
+This projet is under the [**MIT Lisence**](./LICENSE).
 See the file for details
 
 # Authors

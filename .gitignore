@@ -1,5 +1,4 @@
-# Prerequisites
-*.d
+# ----- Build / Compiled files -----
 
 # Object files
 *.o
@@ -12,7 +11,7 @@
 *.map
 *.exp
 
-# Precompiled Headers
+# Precompiled headers
 *.gch
 *.pch
 
@@ -51,5 +50,28 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
-# debug information files
+# Debug information files
 *.dwo
+
+# ----- Make / Dependency files -----
+*.d
+
+# ----- Build directories -----
+build/
+build/obj/
+build/bin/
+
+# ----- VSCode settings -----
+.vscode/
+.vscode/*
+
+# ----- Other IDE / Editor files -----
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+
+# ----- Windows alternate data streams -----
+*:* 
+*tar.gzZone.Identifier
+*hZone.Identifier

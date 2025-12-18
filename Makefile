@@ -1,38 +1,53 @@
-CC = gcc
-CFLAGS = -Wall -Wextra -Iinclude
+# Compilateur et options
+CC      = gcc
+CFLAGS  = -Wall -Wextra -Iinclude
 
-SRC = src
-BUILD = build
-OBJDIR = $(BUILD)/obj
-BINDIR = $(BUILD)/bin
+# Arborescence
+SRC     = src
+BUILD   = build
+OBJDIR  = $(BUILD)/obj
+BINDIR  = $(BUILD)/bin
 
-# Liste des programmes
+# Programmes à générer
 PROGRAMS = client serveur proxy
 
-# Tous les fichiers .c
-CSRC = $(wildcard $(SRC)/*.c)
+# Fichiers sources
+SRCS = \
+	$(SRC)/client.c \
+	$(SRC)/serveur.c \
+	$(SRC)/proxy.c \
+	$(SRC)/simpleSocketAPI.c
 
-# Corresponding objects in build/obj
-OBJS = $(patsubst $(SRC)/%.c,$(OBJDIR)/%.o,$(CSRC))
+# Objets correspondants
+OBJS = $(SRCS:$(SRC)/%.c=$(OBJDIR)/%.o)
 
+# Cible par défaut
 all: dirs $(PROGRAMS:%=$(BINDIR)/%)
 
-# ----- Directories -----
+# ----- Répertoires -----
 dirs:
 	mkdir -p $(OBJDIR)
 	mkdir -p $(BINDIR)
 
-# ----- Object files -----
-$(OBJDIR)/%.o: $(SRC)/%.c include/simpleSocketAPI.h
+# ----- Règle générique pour les .o -----
+$(OBJDIR)/%.o: $(SRC)/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # ----- Executables -----
-$(BINDIR)/%: $(OBJDIR)/%.o $(filter-out $(OBJDIR)/%.o,$(OBJS))
-	$(CC) $^ -o $@
+# client dépend de client.o et simpleSocketAPI.o
+$(BINDIR)/client: $(OBJDIR)/client.o $(OBJDIR)/simpleSocketAPI.o
+	$(CC) $(CFLAGS) $^ -o $@
 
-# ----- Clean -----
+# serveur (si besoin de simpleSocketAPI, ajoute-le ici)
+$(BINDIR)/serveur: $(OBJDIR)/serveur.o $(OBJDIR)/simpleSocketAPI.o
+	$(CC) $(CFLAGS) $^ -o $@
+
+# proxy dépend de proxy.o et simpleSocketAPI.o
+$(BINDIR)/proxy: $(OBJDIR)/proxy.o $(OBJDIR)/simpleSocketAPI.o
+	$(CC) $(CFLAGS) $^ -o $@
+
+# ----- Nettoyage -----
 clean:
-	rm -rf $(OBJDIR)/*
-	rm -rf $(BINDIR)/*
+	rm -rf $(OBJDIR) $(BINDIR)
 
 .PHONY: all clean dirs

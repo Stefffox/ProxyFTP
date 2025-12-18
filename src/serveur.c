@@ -3,6 +3,7 @@
 #include  <sys/socket.h>
 #include  <netdb.h>
 #include  <string.h>
+#include <unistd.h>
 
 #define SERVADDR "localhost"        // Définition de l'adresse IP d'écoute
 #define SERVPORT "0"                // Définition du port d'écoute, 

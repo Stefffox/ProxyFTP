@@ -4,6 +4,7 @@
 #include <netdb.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/select.h>
 #include <stdbool.h>
 #include "simpleSocketAPI.h"
 
@@ -15,11 +16,13 @@
 #define MAXPORTLEN 64        // Taille d'un numéro de port
 #define FTPPORT "21"         // Port du serveur FTP
 
-int main(void)
+int main(int argc, char *argv[])
 {
     int ecode;                       // Codes retour
     char serverAddr[MAXHOSTLEN];     // Adresse locale du proxy
     char serverPort[MAXPORTLEN];     // Port local du proxy
+    char login[50];                  // Login utilisateur (en argument)
+    char realServerAddr[MAXHOSTLEN]; // Adresse du vrai serveur FTP (en argument)
     int descSockRDV;                 // Socket de rendez-vous (proxy côté client)
     int descSockCOM;                 // Socket de communication avec le client FTP
     struct addrinfo hints;           // Contrôle getaddrinfo
@@ -28,9 +31,22 @@ int main(void)
     struct sockaddr_storage from;    // Infos sur le client
     socklen_t len;                   // Longueur des structures de socket
     char buffer[MAXBUFFERLEN];       // Tampon de communication
-    char login[50];                  // Stocke le login utilisateur
-    char realServerAddr[MAXHOSTLEN]; // Adresse du vrai serveur FTP
     int sockCTL_PS;                  // Socket de contrôle vers le vrai serveur FTP
+
+    // Vérification des arguments
+    if (argc != 3)
+    {
+        fprintf(stderr, "Usage: %s <login> <serveur_ftp>\n", argv[0]);
+        fprintf(stderr, "Exemple: %s bob localhost\n", argv[0]);
+        exit(1);
+    }
+
+    strncpy(login, argv[1], sizeof(login) - 1);
+    login[sizeof(login) - 1] = '\0';
+    strncpy(realServerAddr, argv[2], sizeof(realServerAddr) - 1);
+    realServerAddr[sizeof(realServerAddr) - 1] = '\0';
+
+    printf("Proxy pour utilisateur: %s -> serveur: %s\n", login, realServerAddr);
 
     // Création de la socket de RDV
     descSockRDV = socket(AF_INET, SOCK_STREAM, 0);
@@ -42,175 +58,146 @@ int main(void)
 
     // Préparation de hints pour bind()
     memset(&hints, 0, sizeof(hints));
-    hints.ai_flags = AI_PASSIVE;     // mode serveur
-    hints.ai_socktype = SOCK_STREAM; // TCP
-    hints.ai_family = AF_INET;       // IPv4 uniquement
+    hints.ai_flags = AI_PASSIVE;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_family = AF_INET;
 
     // Récupération des infos d'adresse pour le proxy
     ecode = getaddrinfo(SERVADDR, SERVPORT, &hints, &res);
     if (ecode)
     {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(ecode));
+        close(descSockRDV);
         exit(1);
     }
 
-    // Liaison de la socket au couple (IP, port)
+    // Liaison de la socket
     ecode = bind(descSockRDV, res->ai_addr, res->ai_addrlen);
     if (ecode == -1)
     {
-        perror("Erreur liaison de la socket de RDV");
+        perror("Erreur liaison socket RDV");
         freeaddrinfo(res);
         close(descSockRDV);
         exit(3);
     }
     freeaddrinfo(res);
 
-    // Récupération de l'adresse et du port effectivement utilisés
+    // Récupération adresse/port utilisés
     len = sizeof(struct sockaddr_storage);
     ecode = getsockname(descSockRDV, (struct sockaddr *)&myinfo, &len);
     if (ecode == -1)
     {
-        perror("SERVEUR: getsockname");
+        perror("getsockname");
         close(descSockRDV);
         exit(4);
     }
 
     ecode = getnameinfo((struct sockaddr *)&myinfo, sizeof(myinfo),
-                        serverAddr, MAXHOSTLEN,
-                        serverPort, MAXPORTLEN,
+                        serverAddr, MAXHOSTLEN, serverPort, MAXPORTLEN,
                         NI_NUMERICHOST | NI_NUMERICSERV);
     if (ecode != 0)
     {
-        fprintf(stderr, "error in getnameinfo: %s\n", gai_strerror(ecode));
+        fprintf(stderr, "getnameinfo: %s\n", gai_strerror(ecode));
         close(descSockRDV);
         exit(4);
     }
 
-    printf("Proxy FTP à l'écoute sur l'adresse : %s\n", serverAddr);
-    printf("Proxy FTP à l'écoute sur le port    : %s\n", serverPort);
+    printf("Proxy FTP à l'écoute sur %s:%s\n", serverAddr, serverPort);
 
-    // Mise en écoute
+    // Listen
     ecode = listen(descSockRDV, LISTENLEN);
     if (ecode == -1)
     {
-        perror("Erreur initialisation buffer d'écoute");
+        perror("listen");
         close(descSockRDV);
         exit(5);
     }
 
-    // Attente d'un client FTP
+    // Accept client
     len = sizeof(struct sockaddr_storage);
     descSockCOM = accept(descSockRDV, (struct sockaddr *)&from, &len);
     if (descSockCOM == -1)
     {
-        perror("Erreur accept");
+        perror("accept");
         close(descSockRDV);
         exit(6);
     }
+    printf("Client connecté\n");
 
-    // Envoi de la bannière FTP au client
-    strcpy(buffer, "220 BLABLABLA\r\n");
-    if (write(descSockCOM, buffer, strlen(buffer)) == -1)
-    {
-        perror("Erreur écriture bannière");
-        close(descSockCOM);
-        close(descSockRDV);
-        exit(7);
-    }
-
-    // Lecture de la commande USER du client
-    ecode = read(descSockCOM, buffer, sizeof(buffer) - 1);
-    if (ecode == -1)
-    {
-        perror("Erreur lecture USER");
-        close(descSockCOM);
-        close(descSockRDV);
-        exit(8);
-    }
-    buffer[ecode] = '\0';
-    printf("Reçu du client FTP : %s", buffer);
-
-    /*
-     * Hypothèse simple :
-     * Le client envoie : "USER <login>@<adresse_serveur>\r\n"
-     * Exemple : "USER bob@ftp.example.org\r\n"
-     * On extrait donc login et adresse_serveur.
-     */
-
-    char userField[100];
-    if (sscanf(buffer, "USER %99s", userField) != 1)
-    {
-        fprintf(stderr, "Format USER invalide\n");
-        close(descSockCOM);
-        close(descSockRDV);
-        exit(9);
-    }
-
-    // Séparation login et serveur (login@serveur)
-    char *at = strchr(userField, '@');
-    if (at == NULL)
-    {
-        fprintf(stderr, "Format USER attendu: USER login@serveur\r\n");
-        close(descSockCOM);
-        close(descSockRDV);
-        exit(10);
-    }
-
-    *at = '\0';
-    strncpy(login, userField, sizeof(login));
-    login[sizeof(login) - 1] = '\0';
-    strncpy(realServerAddr, at + 1, sizeof(realServerAddr));
-    realServerAddr[sizeof(realServerAddr) - 1] = '\0';
-
-    printf("login: %s, adresse serveur FTP: %s\n", login, realServerAddr);
+    // Bannière proxy au client
+    snprintf(buffer, sizeof(buffer), "220 Proxy FTP pour %s @ %s\r\n", login, realServerAddr);
+    write(descSockCOM, buffer, strlen(buffer));
 
     // Connexion au vrai serveur FTP
     ecode = connect2Server(realServerAddr, FTPPORT, &sockCTL_PS);
     if (ecode == -1)
     {
-        perror("Impossible de se connecter sur le serveur FTP distant");
+        perror("connect2Server");
         close(descSockCOM);
         close(descSockRDV);
         exit(11);
     }
-    printf("Bien connecté au serveur FTP %s:%s\n", realServerAddr, FTPPORT);
+    printf("Connecté au serveur FTP %s:21\n", realServerAddr);
 
-    // Lecture de la bannière du serveur FTP réel
+    // Lecture bannière serveur FTP -> client
     ecode = read(sockCTL_PS, buffer, sizeof(buffer) - 1);
-    if (ecode == -1)
+    if (ecode > 0)
     {
-        perror("Erreur lecture bannière serveur FTP");
-        close(sockCTL_PS);
-        close(descSockCOM);
-        close(descSockRDV);
-        exit(12);
-    }
-    buffer[ecode] = '\0';
-    printf("Bannière du serveur FTP : %s", buffer);
-
-    // Transmission de la bannière réelle au client
-    if (write(descSockCOM, buffer, strlen(buffer)) == -1)
-    {
-        perror("Erreur renvoi bannière au client");
-        close(sockCTL_PS);
-        close(descSockCOM);
-        close(descSockRDV);
-        exit(13);
+        buffer[ecode] = '\0';
+        printf("Bannière serveur: %s", buffer);
+        write(descSockCOM, buffer, ecode);
     }
 
-    /*
-     * À partir d’ici, à toi de continuer :
-     * - lire les commandes du client,
-     * - les renvoyer au serveur FTP,
-     * - lire les réponses du serveur,
-     * - les renvoyer au client.
-     * Tu peux faire une boucle read/write simple pour le contrôle.
-     */
+    printf("Relavage activé (Ctrl+C pour arrêter)\n");
+    fflush(stdout);
 
-    // Fermeture des connexions
+    // BOUCLE DE RELAYAGE
+    while (1)
+    {
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        FD_SET(descSockCOM, &readfds);
+        FD_SET(sockCTL_PS, &readfds);
+        int maxfd = (descSockCOM > sockCTL_PS ? descSockCOM : sockCTL_PS) + 1;
+
+        ecode = select(maxfd, &readfds, NULL, NULL, NULL);
+        if (ecode == -1)
+        {
+            perror("select");
+            break;
+        }
+
+        // Client -> Serveur FTP
+        if (FD_ISSET(descSockCOM, &readfds))
+        {
+            ecode = read(descSockCOM, buffer, sizeof(buffer) - 1);
+            if (ecode <= 0)
+            {
+                printf("Client déconnecté\n");
+                break;
+            }
+            buffer[ecode] = '\0';
+            printf("C->S: %s", buffer);
+            write(sockCTL_PS, buffer, strlen(buffer));
+        }
+
+        // Serveur FTP -> Client
+        if (FD_ISSET(sockCTL_PS, &readfds))
+        {
+            ecode = read(sockCTL_PS, buffer, sizeof(buffer) - 1);
+            if (ecode <= 0)
+            {
+                printf("Serveur déconnecté\n");
+                break;
+            }
+            buffer[ecode] = '\0';
+            printf("S->C: %s", buffer);
+            write(descSockCOM, buffer, strlen(buffer));
+        }
+    }
+
     close(sockCTL_PS);
     close(descSockCOM);
     close(descSockRDV);
-
     return 0;
 }

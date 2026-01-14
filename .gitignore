@@ -1,77 +1,44 @@
-# ----- Build / Compiled files -----
-
-# Object files
+# Dépendances
 *.o
-*.ko
-*.obj
-*.elf
-
-# Linker output
-*.ilk
-*.map
-*.exp
-
-# Precompiled headers
-*.gch
-*.pch
-
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
-
-# Shared objects (inc. Windows DLLs)
-*.dll
 *.so
-*.so.*
-*.dylib
+*.a
 
-# Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
-
-# Debug files
-*.dSYM/
-*.su
-*.idb
-*.pdb
-
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf
-
-# Debug information files
-*.dwo
-
-# ----- Make / Dependency files -----
-*.d
-
-# ----- Build directories -----
+# Binaires compilés
+proxy
+client
+serveur
 build/
-build/obj/
-build/bin/
+bin/
+obj/
 
-# ----- VSCode settings -----
+# Fichiers temporaires
+*~
+.DS_Store
+Thumbs.db
+
+# Logs et debug
+*.log
+core
+vgcore.*
+
+# Makefile généré
+Makefile
+makefile
+
+# Éditeurs/IDE
 .vscode/
-.vscode/*
-
-# ----- Other IDE / Editor files -----
+.idea/
 *.swp
 *.swo
-*.sublime-workspace
-*.sublime-project
+.project
+.cproject
+.settings/
 
-# ----- Windows alternate data streams -----
-*:* 
-*tar.gzZone.Identifier
-*hZone.Identifier
+# Système
+*.bak
+*.tmp
+
+# OS généré
+.DS_Store?
+ehthumbs.db
+Thumbs.db
